@@ -19,11 +19,8 @@ Zumo32U4LineSensors lineSensors;
 #define QTR_THRESHOLD     1000  // microseconds
 
 // These might need to be tuned for different motor types.
-#define REVERSE_SPEED     200  // 0 is stopped, 400 is full speed
-#define TURN_SPEED        200
-#define FORWARD_SPEED     200
 #define REVERSE_DURATION  200  // ms
-#define TURN_DURATION     300  // ms
+#define TURN_DURATION     250  // ms
 
 #define NUM_SENSORS 3
 unsigned int lineSensorValues[NUM_SENSORS];
@@ -39,15 +36,16 @@ const uint16_t turnSpeedMax = 400;
 
 // The minimum speed to drive the motors while turning.  400 is
 // full speed.
-const uint16_t turnSpeedMin = 100;
+const uint16_t turnSpeedMin = 200;
 
-const uint16_t forwardSpeed = 400;
+const uint16_t forwardSpeed = 300;
+const uint16_t maxForwardSpeed = 400;
 
 const uint16_t reverseSpeed = 200;
 
 // The amount to decrease the motor speed by during each cycle
 // when an object is seen.
-const uint16_t deceleration = 10;
+const uint16_t deceleration = 5;
 
 // The amount to increase the speed by during each cycle when an
 // object is not seen.
@@ -61,6 +59,8 @@ const uint16_t acceleration = 10;
 // this variable helps us make a good guess about which direction
 // to turn.
 bool senseDir = RIGHT;
+
+bool charge = false;
 
 // True if the robot is turning left (counter-clockwise).
 bool turningLeft = false;
@@ -103,9 +103,9 @@ void reverse()
   turningRight = false;
 }
 
-void driveForward()
+void driveForward(int speed)
 {
-  motors.setSpeeds(forwardSpeed, forwardSpeed);
+  motors.setSpeeds(speed, speed);
   turningLeft = false;
   turningRight = false;
 }
@@ -126,28 +126,31 @@ void stop()
 
 void loop()
 {
+  ledRed(charge);
 
   lineSensors.read(lineSensorValues);
 
-  if (false && lineSensorValues[0] < QTR_THRESHOLD)
+  if (lineSensorValues[0] < QTR_THRESHOLD)
   {
     // If leftmost sensor detects line, reverse and turn to the
     // right.
-    motors.setSpeeds(-REVERSE_SPEED, -REVERSE_SPEED);
+    motors.setSpeeds(-reverseSpeed, -reverseSpeed);
     delay(REVERSE_DURATION);
-    motors.setSpeeds(TURN_SPEED, -TURN_SPEED);
+    motors.setSpeeds(turnSpeedMax, -turnSpeedMax);
     delay(TURN_DURATION);
-    motors.setSpeeds(FORWARD_SPEED, FORWARD_SPEED);
+    driveForward(forwardSpeed);
+    charge = false;
   }
-  else if (false && lineSensorValues[NUM_SENSORS - 1] < QTR_THRESHOLD)
+  else if (lineSensorValues[NUM_SENSORS - 1] < QTR_THRESHOLD)
   {
     // If rightmost sensor detects line, reverse and turn to the
     // left.
-    motors.setSpeeds(-REVERSE_SPEED, -REVERSE_SPEED);
+    motors.setSpeeds(-reverseSpeed, -reverseSpeed);
     delay(REVERSE_DURATION);
-    motors.setSpeeds(-TURN_SPEED, TURN_SPEED);
+    motors.setSpeeds(-turnSpeedMax, turnSpeedMax);
     delay(TURN_DURATION);
-    motors.setSpeeds(FORWARD_SPEED, FORWARD_SPEED);
+    driveForward(forwardSpeed);
+    charge = false;
   }
   else
   {
@@ -188,7 +191,12 @@ void loop()
 
       bool lastTurnRight = turnRight;
 
-      if (leftValue < rightValue)
+      if (leftValue > 4 && rightValue > 4)
+      {
+        charge = true;
+        driveForward(maxForwardSpeed);
+      }
+      else if (leftValue < rightValue)
       {
         // The right value is greater, so the object is probably
         // closer to the robot's right LEDs, which means the robot
@@ -203,17 +211,10 @@ void loop()
         turnLeft();
         senseDir = LEFT;
       }
-      else if (leftValue > 5 && rightValue > 5)
-      {
-        reverse();
-      }
-      else if (leftValue < 5 && rightValue < 5) {
-        driveForward();
-      }
       else
       {
-        // The values are equal, so stop the motors.
-        stop();
+        // The values are equal
+        driveForward(maxForwardSpeed);
       }
     }
     else
